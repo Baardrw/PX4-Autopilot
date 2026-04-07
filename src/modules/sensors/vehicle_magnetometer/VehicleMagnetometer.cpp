@@ -469,8 +469,6 @@ void VehicleMagnetometer::Run()
 
 	for (int uorb_index = 0; uorb_index < MAX_SENSOR_COUNT; uorb_index++) {
 
-		const bool was_advertised = _advertised[uorb_index];
-
 		if (!_advertised[uorb_index]) {
 			// use data's timestamp to throttle advertisement checks
 			if ((_last_publication_timestamp[uorb_index] == 0)
@@ -478,6 +476,19 @@ void VehicleMagnetometer::Run()
 
 				if (_sensor_sub[uorb_index].advertised()) {
 					_advertised[uorb_index] = true;
+
+					if (uorb_index > 0) {
+						/* the first always exists, but for each further sensor, add a new validator */
+						if (!_voter.add_new_validator()) {
+							PX4_ERR("failed to add validator for %s %i", _calibration[uorb_index].SensorString(), uorb_index);
+						}
+					}
+
+					if (_selected_sensor_sub_index < 0) {
+						_sensor_sub[uorb_index].registerCallback();
+					}
+
+					ParametersUpdate(true);
 
 				} else {
 					_last_publication_timestamp[uorb_index] = time_now_us;
@@ -498,22 +509,6 @@ void VehicleMagnetometer::Run()
 				}
 
 				if (_calibration[uorb_index].enabled()) {
-
-					if (!was_advertised) {
-						if (uorb_index > 0) {
-							/* the first always exists, but for each further sensor, add a new validator */
-							if (!_voter.add_new_validator()) {
-								PX4_ERR("failed to add validator for %s %i", _calibration[uorb_index].SensorString(), uorb_index);
-							}
-						}
-
-						if (_selected_sensor_sub_index < 0) {
-							_sensor_sub[uorb_index].registerCallback();
-						}
-
-						ParametersUpdate(true);
-					}
-
 					const Vector3f vect{_calibration[uorb_index].Correct(Vector3f{report.x, report.y, report.z}) - _calibration_estimator_bias[uorb_index]};
 
 					float mag_array[3] {vect(0), vect(1), vect(2)};
